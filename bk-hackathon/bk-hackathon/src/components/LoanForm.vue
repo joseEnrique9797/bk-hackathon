@@ -59,10 +59,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import axios from 'axios'
+import { ethers } from 'ethers'
 import { useMainStore } from '../stores/useMainStore'
+import { createSmartAccount, createSessionKey } from '../utils/functor'
 
 const store = useMainStore()
-const wallet = store.account
+const wallet = store.account // Connected wallet address from Pinia store
 
 // Form fields
 const loanType = ref('offer')
@@ -94,41 +96,118 @@ const submitLoan = async () => {
     return
   }
 
-  const payload = {
-    type: loanType.value,
-    amount: Number(amount.value),
-    rate: Number(rate.value),
-    duration: Number(duration.value),
-    loanToken: loanToken.value,
-    collateralToken: collateralToken.value,
-    collateralAmount: Number(collateralAmount.value),
-    wallet: wallet, // Use the connected wallet address
+  isLoading.value = true
+
+  if (!wallet) {
+    alert('Please connect your wallet to create a loan offer or request.')
+    isLoading.value = false
+    return
   }
 
-  console.log('Submitting loan:', payload)
-
-  isLoading.value = true // Show spinner
-
   try {
-    await axios.post('http://localhost:5001/api/loans', payload)
-    alert('Loan submitted successfully!')
-    // Reset form after successful submission
-    amount.value = ''
-    rate.value = ''
-    duration.value = ''
-    loanToken.value = ''
-    collateralToken.value = ''
-    collateralAmount.value = ''
+    // Prepare payload for backend
+    const formattedAddress = ethers.getAddress(wallet)
+    const payload = {
+      type: loanType.value,
+      amount: Number(amount.value),
+      rate: Number(rate.value),
+      duration: Number(duration.value),
+      loanToken: loanToken.value,
+      collateralToken: collateralToken.value,
+      collateralAmount: Number(collateralAmount.value),
+      wallet: formattedAddress, // Use the connected wallet address
+    }
+
+    console.log('Submitting loan payload:', payload)
+
+    // Send payload to backend and get contract code
+    const response = await axios.post('http://localhost:5001/api/loans', payload)
+    console.log(response.data)
+
+    // Extract contract code from backend response and the nested response structure
+    const contractCode = response.data.contractCode
+
+    // Remove Markdown formatting markers (` ```solidity ` and ` ``` `)
+    // const cleanedContractCode = rawContractCode.replace(/```solidity|```/g, '')
+
+    // Log the cleaned Solidity contract code
+    // console.log('Contract code received:', cleanedContractCode)
+
+    // Compile and deploy the contract using ethers.js
+    if (!window.ethereum) {
+      alert('Please install MetaMask or another wallet plugin!')
+      return
+    }
+
+    // Request access to the wallet
+    await window.ethereum.request({ method: 'eth_requestAccounts' })
+
+    // Use BrowserProvider to interact with the injected wallet
+    const provider = new ethers.BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
+
+    // Get the wallet address
+    const walletAddress = await signer.getAddress()
+
+    // Get the chainId from the provider
+    // const chainId = await provider.getNetwork().then((network) => network.chainId)
+
+    // Get the nonce for the signer
+    // const nonce = await provider.getTransactionCount(walletAddress)
+
+    // Compile and deploy the contract
+    const gasLimit = ethers.toBigInt(5000000)
+    const gasPrice = ethers.parseUnits('10', 'gwei') // Optional: Set gas price
+    console.log('ABI:', contractCode.abi)
+    console.log('Bytecode:', contractCode.bytecode)
+    console.log('GasLimit:', gasLimit)
+    console.log('GasPrice:', gasPrice)
+    console.log('Signer Address:', walletAddress)
+
+    // const feeData = await provider.getFeeData()
+    // const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas
+    // const maxFeePerGas = feeData.maxFeePerGas
+
+    // Replace these with your actual values
+    // const loanTokenAddress = '0xdAC17F958D2ee523a2206206994597C13D831ec7' // USDT
+    // const collateralTokenAddress = '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599' // WBTC
+
+    // const factory = new ethers.ContractFactory(contractCode.abi, contractCode.bytecode, signer)
+    // const contract = await factory.deploy({
+    //   gasLimit: gasLimit,
+    //   gasPrice: gasPrice,
+    //   maxPriorityFeePerGas: maxPriorityFeePerGas,
+    //   maxFeePerGas: maxFeePerGas,
+    //   chainId: chainId,
+    //   nonce: nonce,
+    // })
+    // await contract.waitForDeployment()
+
+    // console.log(`Contract deployed at address: ${contract.target}`)
+
+    // Attach deployed contract address to the loan offer
+    // alert(`Contract deployed successfully at address: ${contract.target}`)
+    // const FUNCTOR_API_KEY = import.meta.env.VITE_FUNCTOR_API_KEY!
+    // console.log('FUNCTOR_API_KEY:', FUNCTOR_API_KEY)
+
+    const allowedAddresses = ['0x5FbDB2315678afecb367f032d93F642f64180aa3']
+    const smartAccount = (await createSmartAccount(walletAddress, allowedAddresses)) as {
+      result: { sessionKey: string }
+    }
+    alert(`Contract deployed successfully at address ${smartAccount}`)
+    const sessionKey = await createSessionKey(smartAccount.result.sessionKey)
+    alert(`Session keys created successfully at address ${sessionKey}`)
   } catch (error) {
-    console.error('Error submitting loan:', error)
+    console.error('Error submitting loan or deploying contract:', error)
+    alert('An error occurred. Please try again.')
   } finally {
-    isLoading.value = false // Hide spinner
+    isLoading.value = false
   }
 }
 </script>
 
 <style>
-/* Add your existing or new styles here */
+/* Existing styles */
 .loan-form {
   max-width: 400px;
   margin: 0 auto;

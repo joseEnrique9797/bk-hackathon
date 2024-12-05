@@ -12,9 +12,7 @@
     }
   ],
   "typeAcquisition": {
-    "include": [
-      "web3"
-    ]
+    "include": ["web3"]
   },
   "compilerOptions": {
     "baseUrl": ".",
@@ -22,6 +20,7 @@
       "@/*": ["src/*"]
     },
     "types": ["vite/client"],
+    "module": "ES2020",
     "moduleResolution": "node",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
