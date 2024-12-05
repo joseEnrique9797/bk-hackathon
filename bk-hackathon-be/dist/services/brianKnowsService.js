@@ -29,7 +29,8 @@ const deployLoanContract = (prompt) => __awaiter(void 0, void 0, void 0, functio
     };
     try {
         const response = yield axios_1.default.post(url, body, { headers });
-        return response.data.result.contract;
+        // return response.data.result.contract;
+        return response.data;
     }
     catch (error) {
         console.error('Error deploying smart contract:', error);
